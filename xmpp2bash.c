@@ -14,63 +14,7 @@
 typedef struct {
     const char *jid;
     const char *password;
-} echo_bot_ctx;
-
-/**
- * Parse space-separated command into arguments array
- * @param input: Input string containing command and arguments
- * @param argc: Pointer to store number of arguments
- * @return: Dynamically allocated array of arguments (must be freed)
- */
-static char** parse_command(const char *input, int *argc) {
-    char **argv = NULL;
-    int count = 0;
-    const char *p = input;
-    char *token;
-
-    // Skip leading whitespace
-    while (isspace((unsigned char)*p)) p++;
-
-    while (*p) {
-        // Allocate space for new argument
-        argv = realloc(argv, sizeof(char*) * (count + 1));
-        if (!argv) {
-            perror("Failed to allocate memory");
-            return NULL;
-        }
-
-        // Find end of token (whitespace or string end)
-        const char *start = p;
-        while (*p && !isspace((unsigned char)*p)) p++;
-        
-        // Allocate and copy token
-        argv[count] = malloc(p - start + 1);
-        if (!argv[count]) {
-            perror("Failed to allocate memory");
-            // Cleanup previously allocated memory
-            for (int i = 0; i < count; i++) free(argv[i]);
-            free(argv);
-            return NULL;
-        }
-        strncpy(argv[count], start, p - start);
-        argv[count][p - start] = '\0';
-        count++;
-
-        // Skip whitespace between tokens
-        while (isspace((unsigned char)*p)) p++;
-    }
-
-    // Add NULL terminator required by execvp
-    argv = realloc(argv, sizeof(char*) * (count + 1));
-    if (!argv) {
-        perror("Failed to allocate memory");
-        return NULL;
-    }
-    argv[count] = NULL;
-
-    *argc = count;
-    return argv;
-}
+} xmpp_ctx;
 
 /**
  * Execute system command with arguments and capture output
@@ -78,7 +22,7 @@ static char** parse_command(const char *input, int *argc) {
  * @param args: Array of arguments (NULL-terminated)
  * @return: Dynamically allocated string with command output (must be freed)
  */
-static char* execute_system_command(const char *msg) {
+static char* execute_bash(const char *msg) {
 
     if (msg == NULL) {
         fprintf(stderr, "Error: NULL input message\n");
@@ -151,7 +95,7 @@ static int message_handler(xmpp_conn_t *conn, xmpp_stanza_t *msg, void *userdata
     xmpp_stanza_t *body, *reply, *reply_body, *text_node;
     const char *type;
     const char *from;
-    echo_bot_ctx *ctx = (echo_bot_ctx *)userdata;
+    xmpp_ctx *ctx = (xmpp_ctx *)userdata;
     char *command_output = NULL;
     char **args = NULL;
     int argc = 0;
@@ -180,13 +124,11 @@ static int message_handler(xmpp_conn_t *conn, xmpp_stanza_t *msg, void *userdata
     // Print received message to console
     printf("Received from %s: %s\n", from, message_text);
 
-    command_output = execute_system_command(message_text);
+    command_output = execute_bash(message_text);
 
     if (!command_output) {
         command_output = strdup("Error: Unknown error occurred");
     }
-
-    printf("command_output: %s\n", command_output);
 
     xmpp_ctx_t *xmpp_ctx = xmpp_conn_get_context(conn);
     
@@ -237,7 +179,7 @@ static int message_handler(xmpp_conn_t *conn, xmpp_stanza_t *msg, void *userdata
  */
 static void conn_handler(xmpp_conn_t *conn, xmpp_conn_event_t event, 
                         int error, xmpp_stream_error_t *stream_error, void *userdata) {
-    echo_bot_ctx *ctx = (echo_bot_ctx *)userdata;
+    xmpp_ctx *ctx = (xmpp_ctx *)userdata;
     xmpp_ctx_t *ctx_ptr = xmpp_conn_get_context(conn);
     xmpp_stanza_t *presence;
 
@@ -278,12 +220,11 @@ static void conn_handler(xmpp_conn_t *conn, xmpp_conn_event_t event,
 int main(int argc, char **argv) {
     xmpp_ctx_t *ctx;
     xmpp_conn_t *conn;
-    echo_bot_ctx bot_ctx;
+    xmpp_ctx bot_ctx;
 
     // Validate command line arguments
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <XMPP_JID> <PASSWORD>\n", argv[0]);
-        fprintf(stderr, "Example: %s xxx@jabberix.com 123456\n", argv[0]);
         return 1;
     }
 
